@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SLP定向投屏</title>
+    <!-- 手绘风字体（加载失败时自动回退到系统字体，不影响功能） -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&family=ZCOOL+KuaiLe&display=swap">
+    <link rel="stylesheet" href="css/style.css?v=20261014cast">
+</head>
+<body>
+    <!-- ============ 阶段 1: 设备登记 ============ -->
+    <div id="screen-register" class="screen active">
+        <div class="container">
+            <h1>📡 SLP定向投屏</h1>
+            <p class="subtitle">多端接入 · 串口读取 · 实时指向反馈</p>
+
+            <div class="register-box">
+                <div class="form-group">
+                    <label for="device-name">设备名称</label>
+                    <input type="text" id="device-name" placeholder="输入你的设备名称" maxlength="12" autocomplete="off">
+                </div>
+
+                <div class="form-group">
+                    <label>选择设备类型</label>
+                    <div class="device-type-picker">
+                        <button data-device="P" class="device-btn" title="主控设备（读取串口）">
+                            <span class="device-icon">🎯</span>
+                            <span class="device-label">P (主控)</span>
+                            <span class="device-status"></span>
+                        </button>
+                        <button data-device="T1" class="device-btn" title="目标设备 1">
+                            <span class="device-icon">🎁</span>
+                            <span class="device-label">T1</span>
+                            <span class="device-status"></span>
+                        </button>
+                        <button data-device="T2" class="device-btn" title="目标设备 2">
+                            <span class="device-icon">🎁</span>
+                            <span class="device-label">T2</span>
+                            <span class="device-status"></span>
+                        </button>
+                        <button data-device="T3" class="device-btn" title="目标设备 3">
+                            <span class="device-icon">🎁</span>
+                            <span class="device-label">T3</span>
+                            <span class="device-status"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <button id="btn-enter" class="btn-primary" disabled>✅ 确认登记</button>
+                <p class="hint">请选择一个设备类型后确认登记</p>
+            </div>
+
+            <div id="registered-info" class="registered-info hidden">
+                <h3>📋 已登记信息</h3>
+                <p>设备名称：<strong id="display-device-name"></strong></p>
+                <p>设备类型：<strong id="display-device-type"></strong></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ 阶段 2: P 设备 - 串口连接 ============ -->
+    <div id="screen-p-device" class="screen">
+        <div class="container">
+            <h2>🎯 主控设备 (P)</h2>
+            <p class="role-desc">连接串口设备，系统将自动识别指向目标，并把屏幕画面投到被指向的 T</p>
+
+            <div class="serial-controls">
+                <div class="serial-status">
+                    <span class="status-dot off" id="status-dot"></span>
+                    <span id="status-text">未连接</span>
+                </div>
+                <button id="btn-connect" class="btn-secondary">🔗 连接串口</button>
+                <button id="btn-disconnect" class="btn-secondary hidden">❌ 断开</button>
+                <button id="btn-fix-positions" class="btn-primary" title="切换到指向模式，锁存设备坐标">📍 位置确定</button>
+                <button id="btn-settings" class="btn-secondary" title="参数设置">⚙️ 设置</button>
+                <!-- 模式指示器（与连接状态、按钮同一行） -->
+                <div class="mode-indicator" id="mode-indicator">
+                    <span class="mode-badge" id="mode-badge">📡 定位模式</span>
+                    <span class="mode-desc" id="mode-desc">设备随SLP指向实时移动</span>
+                </div>
+            </div>
+
+            <!-- 极坐标图 -->
+            <div class="polar-container">
+                <canvas id="polar-canvas" width="750" height="460"></canvas>
+                <div class="polar-legend">
+                    <div class="legend-item" id="legend-0">
+                        <span class="legend-color" style="background:#e74c3c;"></span>
+                        <span class="legend-name">设备1</span>                        <span class="legend-data">距离: --mm 角度: --°</span>
+                    </div>
+                    <div class="legend-item" id="legend-1">
+                        <span class="legend-color" style="background:#3498db;"></span>
+                        <span class="legend-name">设备2</span>                        <span class="legend-data">距离: --mm 角度: --°</span>
+                    </div>
+                    <div class="legend-item" id="legend-2">
+                        <span class="legend-color" style="background:#2ecc71;"></span>
+                        <span class="legend-name">设备3</span>                        <span class="legend-data">距离: --mm 角度: --°</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 指向指示器 -->
+            <div class="pointing-indicator-panel">
+                <span class="pointing-label">当前指向:</span>
+                <span class="pointing-target" id="pointing-target">--</span>
+                <span class="pointing-status" id="pointing-status">等待串口数据...</span>
+            </div>
+
+            <!-- 投屏面板 -->
+            <div class="cast-panel">
+                <h3>📺 局域网投屏</h3>
+                <p class="cast-hint">先选择要投屏的屏幕或窗口，之后指向哪台 T，画面就显示在哪台 T 上</p>
+                <div class="cast-body">
+                    <div class="cast-preview-box">
+                        <video id="cast-preview" class="hidden" muted playsinline></video>
+                        <div id="cast-preview-empty" class="cast-preview-empty">尚未共享画面</div>
+                    </div>
+                    <div class="cast-side">
+                        <div class="cast-row"><span>共享状态</span><strong id="cast-share-state">未共享</strong></div>
+                        <div class="cast-row"><span>投屏到</span><strong id="cast-target" class="cast-target">--</strong></div>
+                        <div class="cast-row"><span>传输</span><span id="cast-stats" class="cast-stats"></span></div>
+                        <div class="cast-row">
+                            <label for="cast-mode">模式</label>
+                            <select id="cast-mode">
+                                <option value="sticky">锁定：保持投屏，直到指向另一台</option>
+                                <option value="follow">跟随：移开指向就结束投屏</option>
+                            </select>
+                        </div>
+                        <div class="cast-row">
+                            <label for="cast-quality">画质</label>
+                            <select id="cast-quality">
+                                <option value="smooth">流畅（960 宽）</option>
+                                <option value="clear" selected>清晰（1280 宽）</option>
+                                <option value="hd">高清（1920 宽，帧率较低）</option>
+                            </select>
+                        </div>
+                        <div class="cast-buttons">
+                            <button id="btn-cast-share" class="btn-primary">🖥️ 选择投屏内容</button>
+                            <button id="btn-cast-stop-share" class="btn-secondary hidden">⏹ 停止共享</button>
+                            <button id="btn-cast-end" class="btn-secondary" disabled>✋ 结束本次投屏</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 日志面板 -->
+            <div class="log-panel">
+                <h3>📋 日志</h3>
+                <div id="log-content" class="log-content"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ 阶段 3: T 设备 - 状态显示 ============ -->
+    <div id="screen-t-device" class="screen">
+        <div class="t-device-container">
+            <div id="t-status-display" class="t-status-display red">
+                <!-- 仅为动画布局新增的包裹层：被指向时整体上移，给纸片人让出屏幕中央 -->
+                <div class="t-status-stack">
+                    <div class="t-device-header">
+                        <span class="t-device-icon" id="t-device-icon">🔴</span>
+                        <span class="t-device-name" id="t-device-name"></span>
+                    </div>
+                    <div class="t-status-text" id="t-status-text">等待指向...</div>
+                    <div class="t-status-badge" id="t-status-badge">未被指向</div>
+                </div>
+            </div>
+            <!-- 投屏画面（被投屏时覆盖整个 T 屏幕） -->
+            <div id="cast-view" class="cast-view">
+                <img id="cast-img" alt="">
+                <div id="cast-wait" class="cast-wait">📺 正在接收 P 的画面…</div>
+                <div id="cast-label" class="cast-label">📺 来自 P 的投屏 · 轻触切换全屏</div>
+            </div>
+            <!-- Debug info -->
+            <div id="t-debug-info" style="position:fixed;bottom:10px;left:10px;font-size:12px;color:#888;background:rgba(255,255,255,0.9);padding:6px 10px;border-radius:6px;z-index:999;">
+                <div>局域网: <span id="t-pn-status">连接中...</span></div>
+                <div>收到消息数: <span id="t-msg-count">0</span></div>
+                <div>我的类型: <span id="t-my-type">-</span></div>
+                <div>最后消息: <span id="t-last-msg">无</span></div>
+                <div>最后收到: <span id="t-last-time">--:--:--</span></div>
+                <div>投屏: <span id="t-cast-fps">未投屏</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ 设置面板 (Settings Modal) ============ -->
+    <div id="settings-overlay" class="overlay hidden">
+        <div class="settings-box">
+            <h2>⚙️ 参数设置</h2>
+            <p style="color:#aaa;margin-bottom:16px;font-size:0.95em;">修改后点击「保存」即时生效，无需刷新页面</p>
+
+            <div class="settings-grid">
+                <!-- DEVICE_LABELS -->
+                <div class="setting-group">
+                    <h3>📛 设备标签</h3>
+                    <div class="setting-row">
+                        <label>设备 1</label>
+                        <input type="text" id="set-label-0" value="设备1">
+                    </div>
+                    <div class="setting-row">
+                        <label>设备 2</label>
+                        <input type="text" id="set-label-1" value="设备2">
+                    </div>
+                    <div class="setting-row">
+                        <label>设备 3</label>
+                        <input type="text" id="set-label-2" value="设备3">
+                    </div>
+                </div>
+
+                <!-- SMOOTHING_WINDOW -->
+                <div class="setting-group">
+                    <h3>📊 数据处理</h3>
+                    <div class="setting-row">
+                        <label>平滑窗口长度</label>
+                        <input type="number" id="set-smoothing-window" min="1" max="20" step="1" value="5">
+                        <span class="setting-desc">累积到该数量后才开始显示与判定</span>
+                    </div>
+                    <div class="setting-row">
+                        <label>EMA 平滑系数</label>
+                        <input type="number" id="set-smooth-alpha" min="0.05" max="1" step="0.05" value="0.3">
+                        <span class="setting-desc">越大响应越快但越不平滑，越小越平滑但响应越慢</span>
+                    </div>
+                    <div class="setting-row">
+                        <label>测距偏移 (cm)</label>
+                        <input type="number" id="set-dis-offset" min="-200" max="200" step="0.5" value="30">
+                        <span class="setting-desc">串口读到的距离先减去该值（默认 30cm）；填负数则加上</span>
+                    </div>
+                </div>
+
+                <!-- OUTLIER THRESHOLDS -->
+                <div class="setting-group">
+                    <h3>🎯 离群检测</h3>
+                    <div class="setting-row">
+                        <label>角度离群阈值</label>
+                        <input type="number" id="set-azi-outlier" min="100" max="10000" step="100" value="3000">
+                        <span class="setting-desc">最新角度与历史均值偏差超此值视为无效</span>
+                    </div>
+                    <div class="setting-row">
+                        <label>距离离群阈值</label>
+                        <input type="number" id="set-dis-outlier" min="100" max="10000" step="100" value="2000">
+                        <span class="setting-desc">最新距离与历史均值偏差超此值视为无效</span>
+                    </div>
+                </div>
+
+                <!-- POINTING -->
+                <div class="setting-group">
+                    <h3>🔍 指向判定</h3>
+                    <div class="setting-row">
+                        <label>指向角度偏差上限</label>
+                        <input type="number" id="set-pointing-azi-limit" min="100" max="5000" step="100" value="1000">
+                        <span class="setting-desc">平均角度距 0° 的最大偏差（±10°）</span>
+                    </div>
+                    <div class="setting-row">
+                        <label>指向稳定范围</label>
+                        <input type="number" id="set-pointing-stable-range" min="100" max="5000" step="100" value="1000">
+                        <span class="setting-desc">窗口内角度极差上限，超过视为不稳定</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-actions">
+                <button id="btn-settings-reset" class="btn-secondary">恢复默认</button>
+                <button id="btn-settings-save" class="btn-primary">✅ 保存并应用</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Our code -->
+    <script src="js/config.js?v=20261014cast"></script>
+    <script src="js/serial_reader.js?v=20261014cast"></script>
+    <script src="js/polar_plot.js?v=20261014cast"></script>
+    <script src="js/cast.js?v=20261014cast"></script>
+    <script src="js/main.js?v=20261014cast"></script>
+    <!-- 纯展示层：被指向时的纸片人动画（只观察 #t-status-display 的 class，不参与判定） -->
+    <script src="js/cutout_character.js?v=20261014cast"></script>
+</body>
+</html>
